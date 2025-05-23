@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd # 알파벳 표를 만들기 위해 추가
 
 # --- 암호화/복호화 함수 정의 ---
 
@@ -56,8 +57,7 @@ def decrypt_vigenere(ciphertext, keyword):
             plaintext += char
     return plaintext
 
-# 3. 아핀 암호 (a는 26과 서로소여야 하며, b는 정수)
-# 모듈러 역원 계산 함수 (확장 유클리드 호제법)
+# 3. 아핀 암호
 def mod_inverse(a, m):
     """a * x = 1 (mod m) 에서 x (모듈러 역원)를 찾음"""
     for x in range(1, m):
@@ -84,8 +84,7 @@ def decrypt_affine(ciphertext, a, b):
     plaintext = ""
     a_inv = mod_inverse(a, 26)
     if a_inv is None:
-        st.error(f"오류: a={a}는 26과 서로소가 아닙니다. 아핀 암호를 복호화할 수 없습니다.")
-        return "ERROR: Invalid 'a' value"
+        return "ERROR: Invalid 'a' value" # 오류 메시지를 반환하여 상위 함수에서 처리
     
     for char in ciphertext:
         if 'a' <= char <= 'z':
@@ -97,6 +96,23 @@ def decrypt_affine(ciphertext, a, b):
         else:
             plaintext += char
     return plaintext
+
+# --- 알파벳 표 생성 함수 ---
+def create_alphabet_table():
+    """알파벳 표를 생성하여 데이터프레임으로 반환"""
+    alphabet = [chr(ord('A') + i) for i in range(26)]
+    shifted_alphabet = [f"Shift {i}" for i in range(26)]
+    data = {
+        "Original": alphabet
+    }
+    for i in range(26):
+        shifted_list = [chr(((ord(char) - ord('A') + i) % 26) + ord('A')) for char in alphabet]
+        data[f"Shift +{i}"] = shifted_list
+    
+    # 0부터 25까지의 인덱스 추가
+    index_values = [str(i) for i in range(26)]
+    return pd.DataFrame(data, index=index_values)
+
 
 # --- 게임 데이터 및 설정 ---
 
@@ -116,15 +132,15 @@ stages = {
         "title": "스테이지 1: 낡은 책상",
         "text": (
             "낡은 책상 위에는 빛바랜 노트가 놓여 있습니다. 거기에 다음과 같은 메시지가 적혀 있습니다:\n\n"
-            "`WKLV LV D VFUHW PHVVDJH IRU WKH QHAW FOXH. VRIQ.`\n\n"
-            "**힌트:** 이 메시지는 '세 번' 밀려있다고 합니다."
+            "`KHOOR`\n\n"
+            "**힌트:** 이 메시지는 '세 칸 뒤로' 밀려있다고 합니다. (알파벳 표를 참고하세요.)"
         ),
         "cipher_type": "caesar",
-        "cipher_text": "WKLV LV D VFUHW PHVVDJH IRU WKH QHAW FOXH. VRIQ.",
-        "correct_answer": "THIS IS A SECRET MESSAGE FOR THE NEXT CLUE. OPEN.",
-        "key_hint": "3", # 시저 암호의 shift 값
+        "cipher_text": "KHOOR",
+        "correct_answer": "HELLO", # 더 쉬운 답으로 변경
+        "key_hint": 3, # 시저 암호의 shift 값 (힌트용)
         "input_label": "복호화된 메시지 (대문자로):",
-        "key_input_label": "쉬프트 값 (숫자):",
+        "key_input_label": "쉬프트 값 (숫자, 예: 3):", # 힌트 구체화
         "next_stage": "stage2_vigenere",
         "correct_message": "첫 번째 암호가 해독되었습니다! 다음 단서는 벽에 걸린 그림 뒤에 있습니다."
     },
@@ -136,7 +152,7 @@ stages = {
             "**힌트:** 어둠 속에서 속삭이는 '숲'의 목소리에 귀 기울여라. (키워드는 모두 대문자로 입력하세요.)"
         ),
         "cipher_type": "vigenere",
-        "cipher_text": "LXVW HQRXJK WR JHW WR WKH JHG.",
+        "cipher_text": "LXVW HQRXJK WR JHW TO THE JHG.", # 비즈네르 암호는 대소문자를 유지하는 경우가 많아서, 예시 메시지도 대문자 유지
         "correct_answer": "JUST ENOUGH TO GET TO THE END.",
         "key_hint": "FOREST", # 비즈네르 암호의 키워드
         "input_label": "복호화된 메시지 (대문자로):",
@@ -190,7 +206,6 @@ def initialize_game():
 if 'current_stage' not in st.session_state:
     initialize_game()
 
-# 현재 스테이지 정보 가져오기
 current_stage_id = st.session_state.current_stage
 current_stage = stages[current_stage_id]
 
@@ -205,7 +220,7 @@ if st.session_state.game_over:
         st.error(current_stage['text'])
     
     if st.button("새 게임 시작", key="restart_game_button"):
-        initialize_game()
+        initialize_game() # 게임 상태 초기화
         st.rerun() # 앱 새로고침
     st.stop() # 더 이상 코드 실행 방지
 
@@ -222,6 +237,14 @@ if current_stage_id == "intro":
 # 암호 풀이 스테이지 처리
 elif current_stage_id in ["stage1_caesar", "stage2_vigenere", "stage3_affine"]:
     st.code(current_stage["cipher_text"]) # 암호화된 메시지 코드 블록으로 표시
+
+    # 시저 암호 스테이지에서 알파벳 표 표시
+    if current_stage_id == "stage1_caesar":
+        st.markdown("---")
+        st.subheader("💡 시저 암호 알파벳 표")
+        st.markdown("암호화된 글자에서 쉬프트 값만큼 왼쪽으로 이동하면 원래 글자를 찾을 수 있습니다.")
+        st.dataframe(create_alphabet_table().T) # 전치하여 가로로 길게 표시
+        st.markdown("---")
 
     user_input = st.text_input(current_stage["input_label"], key=f"user_input_{current_stage_id}").strip().upper()
     
@@ -254,7 +277,6 @@ elif current_stage_id in ["stage1_caesar", "stage2_vigenere", "stage3_affine"]:
         user_b = st.number_input(current_stage["key2_input_label"], min_value=0, max_value=25, value=11, key=f"user_b_{current_stage_id}")
         
         # 'a' 값이 26과 서로소인지 확인 (아핀 암호의 조건)
-        # 1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25
         coprime_a_values = [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25]
         if user_a not in coprime_a_values:
             st.warning(f"경고: 키 'a' ({user_a})는 26과 서로소가 아닙니다. 올바른 복호화를 위해 26과 서로소인 숫자를 사용하세요.")
@@ -284,7 +306,7 @@ elif current_stage_id in ["stage1_caesar", "stage2_vigenere", "stage3_affine"]:
             else:
                 st.error("틀린 코드입니다. 다시 확인해 보세요!")
                 
-else: # 알 수 없는 스테이지
+else: # 알 수 없는 스테이지 (예기치 않은 오류 방지)
     st.error("알 수 없는 게임 상태입니다. 게임을 다시 시작합니다.")
     initialize_game()
     st.rerun()
